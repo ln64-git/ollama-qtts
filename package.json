@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun run dist/main.ts",
+    "start": "bun run src/main.ts",
     "watch": "bun --watch src/main.ts "
   },
   "devDependencies": {
@@ -12,5 +12,9 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.57",
+    "@langchain/ollama": "^0.2.0"
   }
 }
