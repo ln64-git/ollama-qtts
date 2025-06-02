@@ -1,5 +1,5 @@
 import { serve } from "bun";
-import { OllamaSpeaker, isValidUpdateBody } from "./OllamaSpeaker";
+import { OllamaSpeaker, isValidUpdateBody } from "../OllamaSpeaker";
 
 const speaker = new OllamaSpeaker();
 
@@ -10,13 +10,18 @@ serve({
     const path = url.pathname;
     const method = req.method;
 
+    // GET /state — fetch current state
+    if (path === "/state" && method === "GET") {
+      return Response.json(speaker.getState());
+    }
+
+    // POST /state — update state
     if (path === "/state" && method === "POST") {
       try {
         const body = await req.json();
         if (!isValidUpdateBody(body)) {
           return new Response("Invalid data structure", { status: 400 });
         }
-
         speaker.update(body);
         return Response.json({ status: "updated", state: speaker.getState() });
       } catch {
@@ -24,6 +29,7 @@ serve({
       }
     }
 
+    // POST /send — trigger generation
     if (path === "/send" && method === "POST") {
       speaker.sendQtts();
       return Response.json({ status: "started" });
