@@ -1,11 +1,6 @@
 // ─────────────────────────────────────────────
-import type { Ollama } from "@langchain/ollama";
-
-// Qtts system
-async function callQtts(text: string): Promise<void> {
-  console.log("🔊 Speaking:", text);
-  await new Promise(resolve => setTimeout(resolve, 500));
-}
+import { Ollama } from "@langchain/ollama";
+import type { StreamOllamaParams } from "./types";
 
 // ─────────────────────────────────────────────
 // Markdown cleanup
@@ -24,7 +19,8 @@ function stripMarkdown(text: string): string {
 
 // ─────────────────────────────────────────────
 // Read local files
-async function readScratchpad(path: string): Promise<string> {
+export async function readScratchpad(): Promise<string> {
+  const path = "/home/ln64/Documents/ln64-vault/Daily Research/scratchpad.md"
   try {
     return await Bun.file(path).text();
   } catch {
@@ -33,43 +29,58 @@ async function readScratchpad(path: string): Promise<string> {
   }
 }
 
-async function readDailyNote(dir: string): Promise<string> {
+export async function getResearchData(): Promise<string> {
+  const dir = "/home/ln64/Documents/ln64-vault/Daily Research";
   try {
     const today = new Date().toISOString().split("T")[0];
     return await Bun.file(`${dir}/${today}.md`).text();
   } catch {
-    console.error("⚠️ Error reading daily note");
     return "";
   }
 }
 
-// ─────────────────────────────────────────────
-// Create the prompt
-function buildPrompt(scratchpad: string, research: string, includeResearch: boolean): string {
-  return includeResearch && research.trim()
-    ? `${scratchpad.trim()}\n\n${research.trim()}`
-    : scratchpad.trim();
+export async function callQtts(text: string, port: number = 2001): Promise<void> {
+  const url = `http://localhost:${port}/input`;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error("⚠️ Error calling QTTs:", error);
+  }   
 }
 
-// ─────────────────────────────────────────────
-// Stream + buffer LLM output
-async function speakStream(llm: Ollama, prompt: string) {
+export async function* streamOllama({
+  prompt,
+  model = "gemma3",
+  temperature = 0.7,
+  numPredict = 60,
+}: StreamOllamaParams): AsyncGenerator<string> {
+  const llm = new Ollama({ model, temperature, numPredict });
   const stream = await llm.stream(prompt);
   let buffer = "";
+  const MIN_LENGTH = 5;
 
   for await (const chunk of stream) {
-    const token = chunk ?? "";
-    buffer += token;
-
-    if (/[.?!,;:\n]/.test(token) && buffer.length > 40) {
+    if (!chunk) continue;
+    buffer += chunk;
+    if (/[.?!\n](?:\s|$)/.test(chunk) && buffer.length > 40) {
       const cleaned = stripMarkdown(buffer.trim());
-      if (cleaned.length > 5) await callQtts(cleaned);
+      if (cleaned.length > MIN_LENGTH) {
+        yield cleaned;
+      }
       buffer = "";
     }
   }
 
-  if (buffer.trim().length > 5) {
-    await callQtts(stripMarkdown(buffer.trim()));
+  const final = stripMarkdown(buffer.trim());
+  if (final.length > MIN_LENGTH) {
+    yield final;
   }
 }
 

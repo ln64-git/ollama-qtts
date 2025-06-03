@@ -8,7 +8,8 @@
     "watch": "bun --watch src/main.ts "
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/signale": "^1.4.7"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -16,6 +17,11 @@
   "dependencies": {
     "@langchain/core": "^0.3.57",
     "@langchain/ollama": "^0.2.0",
+    "console-time": "^1.0.9",
+    "install": "^0.13.0",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
+    "signale": "^1.4.0",
     "undici": "^7.10.0"
   }
 }

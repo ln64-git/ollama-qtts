@@ -1,17 +1,36 @@
 import { DynamicServerApp } from "./app";
 import { OllamaSchema, type OllamaSpeakerState } from "./utils/types";
+import { callQtts, getResearchData, readScratchpad, streamOllama } from "./utils/utils";
 
 export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
   schema = OllamaSchema;
-  port = 2001;
-  qttsPort = 2002;
-  scratchpad = "";
-  useResearch = false;
+
+  port = 2000;
+  qttsPort = 2001;
+
+  useResearch = true;
+
   model = "gemma3";
   temperature = 0.7;
-  maxTokens = 60;
+  maxTokens = 120;
 
-  public async sendQtts(): Promise<void> {
-    console.log("🧠 Generating with:", this.getState());
+  public async askOllama(): Promise<void> {
+    const scratchpad = await readScratchpad();
+    if (scratchpad !== "") {
+      let prompt = scratchpad;
+      if (this.useResearch) {
+        prompt += "\n\n" + (await getResearchData());
+      }
+      const stream = streamOllama({
+        prompt,
+        model: this.model,
+        temperature: this.temperature,
+        numPredict: this.maxTokens,
+      });
+      for await (const chunk of stream) {
+        callQtts(chunk);
+      }
+    }
   }
+
 }
