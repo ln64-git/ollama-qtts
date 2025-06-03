@@ -1,6 +1,5 @@
 // ─────────────────────────────────────────────
 import type { Ollama } from "@langchain/ollama";
-import { OllamaSpeaker } from "../OllamaSpeaker";
 
 // Qtts system
 async function callQtts(text: string): Promise<void> {
@@ -74,30 +73,3 @@ async function speakStream(llm: Ollama, prompt: string) {
   }
 }
 
-
-export function parseArgs() {
-  const defaults = new OllamaSpeaker() as Record<string, any>;
-  const args = process.argv.slice(2);
-  const state = { ...defaults };
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (!arg?.startsWith("--")) continue;
-
-    const key = arg.slice(2);
-    if (!(key in defaults)) continue;
-
-    const next = args[i + 1];
-    const current = defaults[key];
-    const type = typeof current;
-
-    state[key] =
-      type === "number" ? Number(next)
-        : type === "boolean" ? (next === undefined || next === "true")
-          : next;
-
-    if (next !== undefined && !next.startsWith("--")) i++;
-  }
-
-  return state;
-}
