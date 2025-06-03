@@ -1,47 +1,15 @@
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, unlinkSync } from "fs";
 import { once } from "events";
-import { writeScratchpad } from "./utils";
-import type { OllamaSpeaker } from "../OllamaSpeaker";
 
-const SCRATCHPAD = "/home/ln64/Documents/ln64-vault/Daily Research/scratchpad.md";
 const AUDIO_PATH = "/tmp/voice.wav";
 const WHISPER_PATH = "./whisper.cpp"; // path to whisper.cpp folder
-const LOCKFILE = "/tmp/recording.lock";
 
 
 
-export async function toggleRecording(app: OllamaSpeaker): Promise<void> {
-  await setupWhisper();
 
-  const recording = existsSync(LOCKFILE);
 
-  if (recording) {
-    console.log("🔁 Stopping recording...");
-    try {
-      unlinkSync(LOCKFILE);
-      await stopRecording();
-      const transcript = await transcribeAudio();
-      console.log("transcript: ", transcript);
-      await writeScratchpad(transcript);
-      app.isRecording = false;
-    } catch (err) {
-      console.error("❌ Error while stopping recording:", err);
-    }
-  } else {
-    console.log("⏺️ Starting new recording...");
-    try {
-      await Bun.write(SCRATCHPAD, "");
-      await Bun.write(LOCKFILE, "1");
-      startRecording();
-      app.isRecording = true;
-    } catch (err) {
-      console.error("❌ Error while starting recording:", err);
-    }
-  }
-}
-
-function startRecording(): void {
+export function startRecording(): void {
   spawn("ffmpeg", [
     "-y",
     "-f", "pulse",
@@ -55,14 +23,14 @@ function startRecording(): void {
   }).unref();
 }
 
-async function stopRecording(): Promise<void> {
+export async function stopRecording(): Promise<void> {
   spawn("pkill", ["-INT", "ffmpeg"], {
     stdio: "ignore",
   });
   await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for flush
 }
 
-async function transcribeAudio(): Promise<string> {
+export async function transcribeAudio(): Promise<string> {
   const modelPath = `${WHISPER_PATH}/models/ggml-base.en.bin`;
   const cliPath = `${WHISPER_PATH}/build/bin/whisper-cli`;
 

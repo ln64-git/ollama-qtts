@@ -1,7 +1,11 @@
 import { DynamicServerApp } from "./app";
-import { toggleRecording } from "./utils/record";
+import { setupWhisper, startRecording, stopRecording, transcribeAudio } from "./utils/record";
 import { OllamaSchema, type OllamaSpeakerState } from "./utils/types";
-import { callQtts, getResearchData, readScratchpad, streamOllama } from "./utils/utils";
+import { callQtts, getResearchData, readScratchpad, streamOllama, writeScratchpad } from "./utils/utils";
+import { existsSync, unlinkSync } from "fs";
+
+const SCRATCHPAD = "/home/ln64/Documents/ln64-vault/Daily Research/scratchpad.md";
+const LOCKFILE = "/tmp/recording.lock";
 
 export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
   schema = OllamaSchema;
@@ -37,19 +41,35 @@ export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
     }
   }
 
-  // right now I can toggle this with command
-  // but it isnt transcribing anything yet
-  // my guess is it's not recording the voice audio
-  // so tomorrow I'll debug how to record voice to scratchpad
-
-  // once I can speak to ollama through the scratchpad
-  // I'll just need to figure out a way to record while holding the keybind
-  // hold keybind to record voice
-  // two keybinds for calling ollama with or without research
-
-  public async recordVoice() {
-    await toggleRecording(this);
+  public async toggleRecording(app: OllamaSpeaker): Promise<void> {
+    await setupWhisper();
+    const recording = existsSync(LOCKFILE);
+    if (recording) {
+      console.log("🔁 Stopping recording...");
+      try {
+        unlinkSync(LOCKFILE);
+        await stopRecording();
+        const transcript = await transcribeAudio();
+        console.log("transcript: ", transcript);
+        await writeScratchpad(transcript);
+        app.isRecording = false;
+      } catch (err) {
+        console.error("❌ Error while stopping recording:", err);
+      }
+    } else {
+      console.log("⏺️ Starting new recording...");
+      try {
+        await Bun.write(SCRATCHPAD, "");
+        await Bun.write(LOCKFILE, "1");
+        startRecording();
+        app.isRecording = true;
+      } catch (err) {
+        console.error("❌ Error while starting recording:", err);
+      }
+    }
   }
+
+  public async holdToRecord() { }
 
 }
 
