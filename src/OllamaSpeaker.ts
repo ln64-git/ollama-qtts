@@ -2,27 +2,20 @@ import { DynamicServerApp } from "./app";
 import { setupWhisper, startRecording, stopRecording, transcribeAudio } from "./utils/record";
 import { OllamaSchema, type OllamaSpeakerState } from "./utils/types";
 import { callQtts, getResearchData, readScratchpad, streamOllama, writeScratchpad } from "./utils/utils";
-import { existsSync, unlinkSync } from "fs";
-
-const SCRATCHPAD = "/home/ln64/Documents/ln64-vault/Daily Research/scratchpad.md";
-const LOCKFILE = "/tmp/recording.lock";
+import { unlinkSync } from "fs";
 
 export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
   schema = OllamaSchema;
-
   port = 2000;
   qttsPort = 2001;
-
   useResearch = true;
-
   model = "gemma3";
   temperature = 0.7;
   maxTokens = 120;
-
   isRecording = false;
 
   public async askOllama(): Promise<void> {
-    console.log("🔍 Asking Ollama...");
+    console.log("🦙 Asking Ollama...");
     const scratchpad = await readScratchpad();
     if (scratchpad !== "") {
       let prompt = scratchpad;
@@ -41,35 +34,27 @@ export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
     }
   }
 
-  public async toggleRecording(app: OllamaSpeaker): Promise<void> {
-    await setupWhisper();
-    const recording = existsSync(LOCKFILE);
-    if (recording) {
-      console.log("🔁 Stopping recording...");
-      try {
-        unlinkSync(LOCKFILE);
-        await stopRecording();
-        const transcript = await transcribeAudio();
-        console.log("transcript: ", transcript);
-        await writeScratchpad(transcript);
-        app.isRecording = false;
-      } catch (err) {
-        console.error("❌ Error while stopping recording:", err);
-      }
-    } else {
-      console.log("⏺️ Starting new recording...");
-      try {
-        await Bun.write(SCRATCHPAD, "");
-        await Bun.write(LOCKFILE, "1");
-        startRecording();
-        app.isRecording = true;
-      } catch (err) {
-        console.error("❌ Error while starting recording:", err);
-      }
+
+  public async startRecording(): Promise<void> {
+    if (!this.isRecording) {
+      await setupWhisper();
+      console.log("🔴 Recording...");
+      await Bun.write("/tmp/recording.lock", "1");
+      startRecording();
+      this.isRecording = true;
     }
   }
 
-  public async holdToRecord() { }
+  public async stopRecording(): Promise<void> {
+    if (this.isRecording) {
+      console.log("⚫ Recording Stopped.");
+      unlinkSync("/tmp/recording.lock");
+      await stopRecording();
+      const transcript = await transcribeAudio();
+      await writeScratchpad(transcript);
+      this.isRecording = false;
+    }
+  }
 
 }
 
