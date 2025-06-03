@@ -1,4 +1,5 @@
 import { ZodObject } from "zod";
+import { isEqual } from "lodash"; // or write your own deepCompare
 
 export abstract class DynamicServerApp<T extends Record<string, any>> {
   abstract port: number;
@@ -6,26 +7,26 @@ export abstract class DynamicServerApp<T extends Record<string, any>> {
 
   getState(): Partial<T> {
     const state: Partial<T> = {};
-    let obj = this;
-    do {
-      for (const key of Object.getOwnPropertyNames(obj)) {
-        if (key === "schema" || typeof (this as any)[key] === "function") continue;
-        try {
-          const val = (this as any)[key];
-          if (!(key in state)) (state as any)[key] = val;
-        } catch { }
+
+    for (const key of Object.keys(this)) {
+      if (key !== "schema" && typeof (this as any)[key] !== "function") {
+        state[key as keyof T] = (this as any)[key];
       }
-      obj = Object.getPrototypeOf(obj);
-    } while (obj && obj !== Object.prototype);
+    }
+
     return state;
   }
+
 
   applyStateUpdate(data: Partial<T>): void {
     const validated = this.schema.partial().parse(data);
     Object.entries(validated).forEach(([key, value]) => {
-      if (key in this) (this as any)[key] = value;
+      if (key in this) {
+        (this as any)[key] = value;
+      }
     });
   }
+
 
   getMetadata(): Record<string, string> {
     return Object.getOwnPropertyNames(this).reduce((meta, key) => {
@@ -33,6 +34,7 @@ export abstract class DynamicServerApp<T extends Record<string, any>> {
       if (typeof val !== "function") meta[key] = typeof val;
       return meta;
     }, {} as Record<string, string>);
+
   }
 
   async probe(timeout = 1000): Promise<boolean> {
@@ -53,17 +55,23 @@ export abstract class DynamicServerApp<T extends Record<string, any>> {
 
   async set(diff: Partial<T>): Promise<void> {
     try {
-      await fetch(`http://localhost:${this.port}/state`, {
+      const res = await fetch(`http://localhost:${this.port}/state`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(diff),
       });
-    } catch { }
+
+      const response = await res.json();
+      console.log("✅ Server response:", response);
+    } catch (e) {
+      console.error("❌ Failed to set state:", e);
+    }
   }
+
 }
 
 export async function runDynamicApp<T extends Record<string, any>>(appInstance: DynamicServerApp<T>): Promise<void> {
-  const rawDefaults = appInstance as unknown as T;
+  const rawDefaults = appInstance.getState() as T;
 
   const { state, rawFlags, mode, targetKeys } = cliToState(rawDefaults);
   const stateDiff = diffStatePatch(state, appInstance.getState() as T);
@@ -71,10 +79,15 @@ export async function runDynamicApp<T extends Record<string, any>>(appInstance: 
   const routes = buildRoutes(appInstance);
 
   if (mode === "get" && targetKeys.length > 0) {
-    const isRunning = await appInstance.probe();
-    const current = isRunning
-      ? await (await fetch(`http://localhost:${appInstance.port}/state`)).json()
-      : appInstance.getState();
+    const isRunning = await appInstance.probe(); // ✅ define this first
+    let current: Partial<T> = {};
+
+    if (isRunning) {
+      const res = await fetch(`http://localhost:${appInstance.port}/state`);
+      current = await res.json() as Partial<T>;
+    } else {
+      current = appInstance.getState();
+    }
 
     for (const key of targetKeys) {
       const currentState = current as Record<string, any>;
@@ -89,18 +102,31 @@ export async function runDynamicApp<T extends Record<string, any>>(appInstance: 
       await appInstance.set(stateDiff);
       const res = await fetch(`http://localhost:${appInstance.port}/state`);
       const json = await res.json();
-      console.log("Remote state updated:", json);
     } else {
       appInstance.applyStateUpdate(stateDiff);
-      console.log("Local state updated:", appInstance.getState());
     }
     return;
   }
 
   if (rawFlags.length) {
     const handler = routes[`/${rawFlags[0]}`];
-    if (handler) return await handler(appInstance);
+    const isRunning = await appInstance.probe();
+
+    if (handler) {
+      if (isRunning) {
+        console.log(`🛰️ Proxying --${rawFlags[0]} to running server at port ${appInstance.port}...`);
+        const res = await fetch(`http://localhost:${appInstance.port}/${rawFlags[0]}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "[]", // empty args
+        });
+        const json = await res.json();
+        console.log("✅ Remote result:", json);
+        return;
+      }
+    }
   }
+
 
   if (!(await appInstance.probe())) {
     console.log(`Starting server on port ${appInstance.port}...`);
@@ -120,7 +146,10 @@ function buildRoutes<T extends Record<string, any>>(
   return Object.getOwnPropertyNames(Object.getPrototypeOf(appInstance))
     .filter(key => key !== "constructor" && typeof (appInstance as any)[key] === "function")
     .reduce((acc, key) => {
-      acc[`/${key}`] = async (app, args) => await (app as any)[key](...(args || []));
+      acc[`/${key}`] = async (app, args) => {
+        const actualArgs = Array.isArray(args) ? args : [];
+        return await (app as any)[key](...actualArgs);
+      };
       return acc;
     }, {} as Record<string, RemoteAction<T>>);
 }
@@ -129,6 +158,8 @@ export type RemoteAction<T extends Record<string, any>> = (
   appInstance: DynamicServerApp<T>,
   args?: any
 ) => Promise<any>;
+
+import http from "http";
 
 export function startServer<T extends Record<string, any>>(
   appInstance: DynamicServerApp<T>,
@@ -140,46 +171,88 @@ export function startServer<T extends Record<string, any>>(
   const port = options.port ?? 2001;
   const routes = options.routes ?? {};
 
-  Bun.serve({
-    port,
-    async fetch(req) {
-      const url = new URL(req.url);
-      const method = req.method;
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+    const method = req.method ?? "GET";
 
-      if (url.pathname === "/state") {
-        if (method === "GET") {
-          return Response.json(appInstance.getState());
-        }
+    if (url.pathname === "/state") {
+      if (method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(appInstance.getState()));
+        return;
+      }
 
-        if (method === "POST") {
+      if (method === "POST") {
+        let body = "";
+        req.on("data", chunk => (body += chunk));
+        req.on("end", () => {
           try {
-            const body = await req.json() as Partial<T>;
-            appInstance.applyStateUpdate(body);
-            const updated = appInstance.getState();
-            return Response.json({ status: "updated", state: updated });
+            const parsed = JSON.parse(body);
+            const before = appInstance.getState();
+
+            const patch: Partial<T> = {};
+            for (const key in parsed) {
+              if (!isEqual(parsed[key], before[key])) {
+                (patch as any)[key] = parsed[key];
+              }
+            }
+
+            if (Object.keys(patch).length > 0) {
+              appInstance.applyStateUpdate(patch);
+              console.log("✅ State updated:", appInstance.getState());
+            } else {
+              console.log("⏭ No differences, skipping update");
+            }
+
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ status: "ok", state: appInstance.getState() }));
           } catch (err: any) {
-            return Response.json({ error: err.message || "Invalid JSON" }, { status: 400 });
+            console.error("❌ Parse error:", err);
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: err.message || "Invalid JSON" }));
           }
-        }
+        });
 
-        return new Response("Method Not Allowed", { status: 405 });
+        return;
       }
 
-      const routeHandler = routes[url.pathname];
-      if (method === "POST" && routeHandler) {
+
+      res.writeHead(405);
+      res.end("Method Not Allowed");
+      return;
+    }
+
+    if (method === "POST" && routes[url.pathname]) {
+      let body = "";
+      req.on("data", chunk => (body += chunk));
+      req.on("end", async () => {
         try {
-          const args = await req.json();
-          const result = await routeHandler(appInstance, args);
-          return Response.json({ status: "ok", result });
+          const parsed = JSON.parse(body);
+          if (typeof routes[url.pathname] === "function") {
+            const result = await routes[url.pathname]!(appInstance, parsed);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ status: "ok", result }));
+          } else {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Route not found" }));
+          }
         } catch (err: any) {
-          return Response.json({ error: err.message }, { status: 500 });
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
         }
-      }
+      });
+      return;
+    }
 
-      return new Response("Not Found", { status: 404 });
-    },
+    res.writeHead(404);
+    res.end("Not Found");
+  });
+
+  server.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
   });
 }
+
 // src/core/CLI.ts
 export function cliToState<T extends Record<string, any>>(defaults: T): { state: T; rawFlags: string[]; mode: "get" | "set" | null; targetKeys: string[] } {
   const args = process.argv.slice(2);
@@ -230,10 +303,10 @@ export function cliToState<T extends Record<string, any>>(defaults: T): { state:
 }
 
 
-export function diffStatePatch<T extends Record<string, any>>(cliArgs: T, defaults: T): Partial<T> {
+export function diffStatePatch<T extends Record<string, any>>(cliArgs: T, currentState: Partial<T>): Partial<T> {
   const patch: Partial<T> = {};
   for (const key in cliArgs) {
-    if (cliArgs[key] !== defaults[key]) {
+    if (cliArgs[key] !== undefined && cliArgs[key] !== currentState[key]) {
       patch[key] = cliArgs[key];
     }
   }

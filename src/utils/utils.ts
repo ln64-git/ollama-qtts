@@ -29,6 +29,15 @@ export async function readScratchpad(): Promise<string> {
   }
 }
 
+export async function writeScratchpad(content: string): Promise<void> {
+  const path = "/home/ln64/Documents/ln64-vault/Daily Research/scratchpad.md";
+  try {
+    await Bun.write(path, content);
+  } catch (error) {
+    console.error("⚠️ Error writing to scratchpad:", error);
+  }
+}
+
 export async function getResearchData(): Promise<string> {
   const dir = "/home/ln64/Documents/ln64-vault/Daily Research";
   try {

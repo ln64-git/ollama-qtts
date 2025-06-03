@@ -1,4 +1,5 @@
 import { DynamicServerApp } from "./app";
+import { toggleRecording } from "./utils/record";
 import { OllamaSchema, type OllamaSpeakerState } from "./utils/types";
 import { callQtts, getResearchData, readScratchpad, streamOllama } from "./utils/utils";
 
@@ -14,7 +15,10 @@ export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
   temperature = 0.7;
   maxTokens = 120;
 
+  isRecording = false;
+
   public async askOllama(): Promise<void> {
+    console.log("🔍 Asking Ollama...");
     const scratchpad = await readScratchpad();
     if (scratchpad !== "") {
       let prompt = scratchpad;
@@ -33,4 +37,10 @@ export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
     }
   }
 
+  public async recordVoice() {
+    await toggleRecording(this);
+    console.log(`📢 Server instance: isRecording=${this.isRecording}`);
+  }
+
 }
+

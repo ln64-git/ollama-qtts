@@ -8,6 +8,7 @@ export const OllamaSchema = z.object({
   model: z.string(),
   temperature: z.number(),
   maxTokens: z.number(),
+  isRecording: z.boolean(),
 });
 
 export type StreamOllamaParams = {
