@@ -109,18 +109,22 @@ export async function runDynamicApp<T extends Record<string, any>>(appInstance: 
     if (handler) {
       if (isRunning) {
         console.log(`🛰️ Proxying --${rawFlags[0]} to running server at port ${appInstance.port}...`);
+        const argsToSend = JSON.stringify(process.argv.slice(3)); // add this
         const res = await fetch(`http://localhost:${appInstance.port}/${rawFlags[0]}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: "[]", // empty args
+          body: argsToSend,
         });
         const json = await res.json();
         console.log("✅ Remote result:", json);
         return;
+      } else {
+        console.log(`🚀 Invoking local method --${rawFlags[0]}`);
+        await handler(appInstance, process.argv.slice(3));
+        return;
       }
     }
   }
-
 
   if (!(await appInstance.probe())) {
     console.log(`Starting server...`);
