@@ -7,16 +7,13 @@ export abstract class DynamicServerApp<T extends Record<string, any>> {
 
   getState(): Partial<T> {
     const state: Partial<T> = {};
-
     for (const key of Object.keys(this)) {
       if (key !== "schema" && typeof (this as any)[key] !== "function") {
         state[key as keyof T] = (this as any)[key];
       }
     }
-
     return state;
   }
-
 
   applyStateUpdate(data: Partial<T>): void {
     const validated = this.schema.partial().parse(data);
@@ -27,14 +24,12 @@ export abstract class DynamicServerApp<T extends Record<string, any>> {
     });
   }
 
-
   getMetadata(): Record<string, string> {
     return Object.getOwnPropertyNames(this).reduce((meta, key) => {
       const val = (this as any)[key];
       if (typeof val !== "function") meta[key] = typeof val;
       return meta;
     }, {} as Record<string, string>);
-
   }
 
   async probe(timeout = 1000): Promise<boolean> {
@@ -45,7 +40,6 @@ export abstract class DynamicServerApp<T extends Record<string, any>> {
       const res = await fetch(`http://localhost:${this.port}/state`, {
         signal: controller.signal,
       });
-
       clearTimeout(id);
       return res.ok;
     } catch {
@@ -129,7 +123,7 @@ export async function runDynamicApp<T extends Record<string, any>>(appInstance: 
 
 
   if (!(await appInstance.probe())) {
-    console.log(`Starting server on port ${appInstance.port}...`);
+    console.log(`Starting server...`);
     return startServer(appInstance, { port: appInstance.port, routes });
   } else {
     console.log(`Server is already running on port ${appInstance.port}.`);

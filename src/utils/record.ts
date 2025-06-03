@@ -25,7 +25,6 @@ export async function toggleRecording(app: OllamaSpeaker): Promise<void> {
       console.log("transcript: ", transcript);
       await writeScratchpad(transcript);
       app.isRecording = false;
-      console.log("✅ Transcription written to scratchpad.");
     } catch (err) {
       console.error("❌ Error while stopping recording:", err);
     }
@@ -47,6 +46,8 @@ function startRecording(): void {
     "-y",
     "-f", "pulse",
     "-i", "default",
+    "-ac", "1",              // mono
+    "-filter:a", "loudnorm", // normalize volume
     AUDIO_PATH,
   ], {
     stdio: "ignore",
@@ -65,16 +66,20 @@ async function transcribeAudio(): Promise<string> {
   const modelPath = `${WHISPER_PATH}/models/ggml-base.en.bin`;
   const cliPath = `${WHISPER_PATH}/build/bin/whisper-cli`;
 
+  const outputFile = `${WHISPER_PATH}/output`;
   const whisper = spawn(cliPath, [
     "-m", modelPath,
     "-f", AUDIO_PATH,
     "-otxt",
+    "-of", outputFile, // whisper will add `.txt`
   ]);
-
   await once(whisper, "exit");
 
-  const outputPath = `${WHISPER_PATH}/voice.wav.txt`;
-  const transcript = await Bun.file(outputPath).text().catch(() => "");
+  const transcriptPath = `${outputFile}.txt`;
+  const transcript = await Bun.file(transcriptPath).text().catch(err => {
+    console.error("❌ Could not read transcript:", err);
+    return "";
+  });
   return transcript.trim();
 }
 
@@ -83,7 +88,6 @@ export async function setupWhisper(): Promise<void> {
   const modelPath = `${WHISPER_PATH}/models/ggml-base.en.bin`;
 
   if (existsSync(binPath) && existsSync(modelPath)) {
-    console.log("✅ whisper.cpp already set up.");
     return;
   }
 

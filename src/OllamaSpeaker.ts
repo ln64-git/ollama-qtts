@@ -37,9 +37,18 @@ export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
     }
   }
 
+  // right now I can toggle this with command
+  // but it isnt transcribing anything yet
+  // my guess is it's not recording the voice audio
+  // so tomorrow I'll debug how to record voice to scratchpad
+
+  // once I can speak to ollama through the scratchpad
+  // I'll just need to figure out a way to record while holding the keybind
+  // hold keybind to record voice
+  // two keybinds for calling ollama with or without research
+
   public async recordVoice() {
     await toggleRecording(this);
-    console.log(`📢 Server instance: isRecording=${this.isRecording}`);
   }
 
 }
