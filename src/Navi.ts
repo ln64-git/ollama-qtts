@@ -1,13 +1,13 @@
-import { DynamicServerApp } from "./app";
+import { DynamicServerApp } from "../core/app";
 import { setupWhisper, startRecording, stopRecording, transcribeAudio } from "./utils/record";
-import { OllamaSchema, type OllamaSpeakerState } from "./utils/types";
+import { OllamaSchema as NaviSchema, type OllamaSpeakerState as NaviState } from "./utils/types";
 import { callQtts, getResearchData, readScratchpad, streamOllama, writeScratchpad } from "./utils/utils";
 import { unlinkSync } from "fs";
 
-export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
-  schema = OllamaSchema;
+export class Navi extends DynamicServerApp<NaviState> {
+  schema = NaviSchema;
   port = 2000;
-  qttsPort = 2001;
+  nayruPort = 2001;
   useResearch = true;
   model = "gemma3";
   temperature = 0.7;
@@ -33,7 +33,6 @@ export class OllamaSpeaker extends DynamicServerApp<OllamaSpeakerState> {
       }
     }
   }
-
 
   public async startRecording(): Promise<void> {
     if (!this.isRecording) {

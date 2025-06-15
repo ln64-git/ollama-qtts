@@ -2,8 +2,6 @@
 import { Ollama } from "@langchain/ollama";
 import type { StreamOllamaParams } from "./types";
 
-// ─────────────────────────────────────────────
-// Markdown cleanup
 function stripMarkdown(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -17,8 +15,6 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
-// ─────────────────────────────────────────────
-// Read local files
 export async function readScratchpad(): Promise<string> {
   const path = "/home/ln64/Documents/ln64-vault/Daily Research/scratchpad.md"
   try {
