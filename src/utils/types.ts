@@ -1,4 +1,4 @@
-import { z } from "zod";
+                                          import { z } from "zod";
 
 export type OllamaSpeakerState = z.infer<typeof OllamaSchema>;
 export const OllamaSchema = z.object({

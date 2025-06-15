@@ -1,24 +1,24 @@
 import { DynamicServerApp } from "../core/app";
 import { setupWhisper, startRecording, stopRecording, transcribeAudio } from "./utils/record";
 import { OllamaSchema as NaviSchema, type OllamaSpeakerState as NaviState } from "./utils/types";
-import { callQtts, getResearchData, readScratchpad, streamOllama, writeScratchpad } from "./utils/utils";
+import { callQtts, getResearchData, streamOllama } from "./utils/utils";
 import { unlinkSync } from "fs";
 
 export class Navi extends DynamicServerApp<NaviState> {
   schema = NaviSchema;
   port = 2000;
   nayruPort = 2001;
-  useResearch = true;
+  useResearch = false;
   model = "gemma3";
   temperature = 0.7;
   maxTokens = 120;
   isRecording = false;
+  scratchpad = "";
 
   public async askOllama(): Promise<void> {
     console.log("🦙 Asking Ollama...");
-    const scratchpad = await readScratchpad();
-    if (scratchpad !== "") {
-      let prompt = scratchpad;
+    if (this.scratchpad !== "") {
+      let prompt = this.scratchpad;
       if (this.useResearch) {
         prompt += "\n\n" + (await getResearchData());
       }
@@ -50,10 +50,9 @@ export class Navi extends DynamicServerApp<NaviState> {
       unlinkSync("/tmp/recording.lock");
       await stopRecording();
       const transcript = await transcribeAudio();
-      await writeScratchpad(transcript);
+      console.log("transcript: ", transcript);
+      this.scratchpad = transcript; 
       this.isRecording = false;
     }
   }
-
 }
-
